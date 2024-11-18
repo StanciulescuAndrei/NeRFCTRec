@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import numpy as np
+import math
 
 class NeAF(nn.Module):
     def __init__(self, numInputFeatures, encodingDegree):
@@ -22,7 +23,7 @@ class NeAF(nn.Module):
             nn.Linear(256, 256), nn.ReLU(),
             nn.Linear(256, 128), nn.ReLU(),
             nn.Linear(128, 32), nn.ReLU(),
-            nn.Linear(32, 1),
+            nn.Linear(32, 1), nn.LeakyReLU()
         )
 
     @staticmethod
@@ -50,42 +51,32 @@ def renderRays(neaf_model, geometryDescriptor, batchSize, numSamplePoints):
         for px in desc['pixels']:
             sp = np.array(desc['src'])
             ep = np.array(px)
-            dt.append(np.linalg.norm(ep - sp))
+            dt.append(np.linalg.norm(ep - sp) / numSamplePoints)
             for t in np.linspace(0, 1, numSamplePoints):
                 samplePoints.append(sp * (1.0 - t) + ep * t)
                 
 
-    samplePoints = torch.tensor(np.array(samplePoints), dtype=torch.float32, requires_grad=True).squeeze(1)
+    samplePoints = torch.tensor(np.array(samplePoints), dtype=torch.float32, requires_grad=True).squeeze(1).cuda()
     densities = neaf_model(samplePoints)
-    dt = torch.tensor(np.array(dt), dtype=torch.float32, requires_grad=True)
+    dt = torch.tensor(np.array(dt), dtype=torch.float32, requires_grad=True).cuda()
 
     densities = densities.view(batchSize, numSamplePoints)
 
-    accum = torch.zeros(batchSize, dtype=torch.float32, requires_grad=True)
-    T = torch.ones(batchSize, requires_grad=True)
+    accum = torch.zeros(batchSize, dtype=torch.float32, requires_grad=True).cuda()
+    Tval = torch.ones(batchSize).cuda()
     for sample in range(numSamplePoints):
-        alpha = torch.exp(-densities[:, sample] * dt)
-        accum = accum + T * (1 - alpha)
-        T = T * alpha
-    print(f"T.requires_grad: {T.requires_grad}")
-    print(f"accum.requires_grad: {accum.requires_grad}")
-    print(f"alpha.requires_grad: {alpha.requires_grad}")
-    print(f"samplePoints.requires_grad: {samplePoints.requires_grad}")
-    print(f"densities.requires_grad: {densities.requires_grad}")
-    for name, param in neaf_model.named_parameters():
-        print(f"{name} gradient: {param.grad}")
-
+        alpha = torch.exp(-densities[:, sample] * dt).cuda()
+        accum = accum + Tval * (1 - alpha)
+        Tval = Tval * alpha
     return accum
 
-def trainModel(neafModel, samples, groundTruth):
+def trainModel(neafModel, groundTruth, detectorPixels, detectorCount, projCount):
     loss_fn = torch.nn.MSELoss()
-    optimizer = torch.optim.SGD(neafModel.parameters(), lr=0.3, momentum=0.9)
+    optimizer = torch.optim.SGD(neafModel.parameters(), lr=0.6, momentum=0.9)
 
-    for epoch in range(3000):
+    for epoch in range(200):
         optimizer.zero_grad()
-        output = neafModel(samples)
-
-        # output = renderRays(neafModel, detectorPixels, detectorCount*projCount, 128)
+        output = renderRays(neafModel, detectorPixels, detectorCount*projCount, 128)
 
         loss = loss_fn(output, groundTruth)
         loss.backward()
