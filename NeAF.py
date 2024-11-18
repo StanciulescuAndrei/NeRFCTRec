@@ -24,7 +24,6 @@ class NeAF(nn.Module):
             nn.Linear(128, 32), nn.ReLU(),
             nn.Linear(32, 1),
         )
-        self.sigmoid = nn.Sigmoid()
 
     @staticmethod
     def positionalEncoding(x, L):
@@ -38,8 +37,7 @@ class NeAF(nn.Module):
         emb_x = self.positionalEncoding(x, self.encodingDegree)
         h = self.block1(emb_x)
         out = self.block2(torch.cat((h, emb_x), dim=1))
-        density = self.sigmoid(out)
-        return density
+        return out
     
 
 def renderRays(neaf_model, geometryDescriptor, batchSize, numSamplePoints):
@@ -81,9 +79,9 @@ def renderRays(neaf_model, geometryDescriptor, batchSize, numSamplePoints):
 
 def trainModel(neafModel, samples, groundTruth):
     loss_fn = torch.nn.MSELoss()
-    optimizer = torch.optim.SGD(neafModel.parameters(), lr=0.6, momentum=0.9)
+    optimizer = torch.optim.SGD(neafModel.parameters(), lr=0.3, momentum=0.9)
 
-    for epoch in range(5000):
+    for epoch in range(3000):
         optimizer.zero_grad()
         output = neafModel(samples)
 

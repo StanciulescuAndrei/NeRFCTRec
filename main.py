@@ -37,7 +37,7 @@ torch.set_grad_enabled(True)
 neafModel = NeAF(numInputFeatures=2, encodingDegree=8).cuda()
 neafModel.train()
 
-torchSino = torch.tensor(V_exact, dtype=torch.float32, requires_grad=True).reshape([256*256, 1]).cuda()
+torchSino = torch.tensor(sinogram, dtype=torch.float32, requires_grad=True).reshape([projCount * detectorCount, 1]).cuda()
 samplePoints = np.zeros([256 * 256, 2], dtype=np.float32)
 for x in range(256):
     for y in range(256):
@@ -58,7 +58,7 @@ evalSamples = torch.tensor(evalsamplePoints, requires_grad=False, dtype=torch.fl
 
 output = sampleModel(neafModel, evalSamples)
 
-
+plt.gray()
 plt.subplot(1, 2, 1)
 plt.imshow(output)
 plt.subplot(1, 2, 2)
