@@ -34,40 +34,36 @@ for descriptor in  vectors:
 
 torch.set_grad_enabled(True)
 
-neafModel = NeAF(numInputFeatures=2, encodingDegree=6)
+neafModel = NeAF(numInputFeatures=2, encodingDegree=8).cuda()
 neafModel.train()
 
-for name, param in neafModel.named_parameters():
-    print(f"{name}: requires_grad={param.requires_grad}")
-
-torchSino = torch.tensor(sinogram, dtype=torch.float32, requires_grad=True).flatten()
-torchSino = torchSino.to(dtype=torch.float32)
-
-
-loss_fn = torch.nn.MSELoss()
-optimizer = torch.optim.SGD(neafModel.parameters(), lr=0.1, momentum=0.9)
-
-for epoch in range(10):
-    optimizer.zero_grad()
-    output = renderRays(neafModel, detectorPixels, detectorCount*projCount, 128)
-    loss = loss_fn(output, torchSino)
-    print(f"output.requires_grad: {output.requires_grad}")
-    print(f"torchSino.requires_grad: {torchSino.requires_grad}")
-    # for name, param in neafModel.named_parameters():
-    #     if param.grad is None:
-    #         print(f"No gradient for parameter: {name}")
-
-    loss.backward()
-
-    optimizer.step()
-    print(f"Epoch {epoch}: loss {loss}")
+torchSino = torch.tensor(V_exact, dtype=torch.float32, requires_grad=True).reshape([256*256, 1]).cuda()
+samplePoints = np.zeros([256 * 256, 2], dtype=np.float32)
+for x in range(256):
+    for y in range(256):
+        samplePoints[x * 256 + y, 0] = x / 128.0 - 1.0
+        samplePoints[x * 256 + y, 1] = y / 128.0 - 1.0
 
 
+samples = torch.tensor(samplePoints, requires_grad=True, dtype=torch.float32).cuda()
 
-output = output.cpu().detach().numpy()
-output = np.reshape(output, [projCount, detectorCount])
-print(np.max(output))
-print(np.min(output))
+trainModel(neafModel, samples, torchSino)
+
+evalsamplePoints = np.zeros([256 * 256, 2], dtype=np.float32)
+for x in range(256):
+    for y in range(256):
+        evalsamplePoints[x * 256 + y, 0] = x / 128.0 - 1.0
+        evalsamplePoints[x * 256 + y, 1] = y / 128.0 - 1.0
+evalSamples = torch.tensor(evalsamplePoints, requires_grad=False, dtype=torch.float32).cuda()
+
+output = sampleModel(neafModel, evalSamples)
+
+
+plt.subplot(1, 2, 1)
+plt.imshow(output)
+plt.subplot(1, 2, 2)
+plt.imshow(torchSino.reshape([256, 256]).detach().cpu())
+plt.show()
 
 
 # garbage disposal

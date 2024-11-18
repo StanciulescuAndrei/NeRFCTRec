@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
 import numpy as np
 
 class NeAF(nn.Module):
@@ -23,7 +24,7 @@ class NeAF(nn.Module):
             nn.Linear(128, 32), nn.ReLU(),
             nn.Linear(32, 1),
         )
-        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
 
     @staticmethod
     def positionalEncoding(x, L):
@@ -37,7 +38,7 @@ class NeAF(nn.Module):
         emb_x = self.positionalEncoding(x, self.encodingDegree)
         h = self.block1(emb_x)
         out = self.block2(torch.cat((h, emb_x), dim=1))
-        density = self.relu(out)
+        density = self.sigmoid(out)
         return density
     
 
@@ -77,3 +78,25 @@ def renderRays(neaf_model, geometryDescriptor, batchSize, numSamplePoints):
         print(f"{name} gradient: {param.grad}")
 
     return accum
+
+def trainModel(neafModel, samples, groundTruth):
+    loss_fn = torch.nn.MSELoss()
+    optimizer = torch.optim.SGD(neafModel.parameters(), lr=0.6, momentum=0.9)
+
+    for epoch in range(5000):
+        optimizer.zero_grad()
+        output = neafModel(samples)
+
+        # output = renderRays(neafModel, detectorPixels, detectorCount*projCount, 128)
+
+        loss = loss_fn(output, groundTruth)
+        loss.backward()
+
+        optimizer.step()
+        print(f"Epoch {epoch}: loss {loss}")
+
+@torch.no_grad()
+def sampleModel(neafModel, samples):
+    output = neafModel(samples).detach().cpu()
+    output = torch.reshape(output, [256, 256])
+    return output
