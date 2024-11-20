@@ -4,8 +4,11 @@ import numpy as np
 from NeAF import *
 
 # create geometries and projector
-proj_geom = astra.create_proj_geom('fanflat', 1.0, 256, np.linspace(0, 2.0 * np.pi, 6, endpoint=False), 10000, 200)
-vol_geom = astra.create_vol_geom(256, 256, -128, 128, -128, 128)
+bboxMin = np.array([-128, -128])
+bboxMax = np.array([128, 128])
+
+proj_geom = astra.create_proj_geom('fanflat', 1.2, 256, np.linspace(0, 2.0 * np.pi, 6, endpoint=False), 10000, 200)
+vol_geom = astra.create_vol_geom(256, 256, bboxMin[0], bboxMax[0], bboxMin[1], bboxMax[1])
 proj_id = astra.create_projector('cuda', proj_geom, vol_geom)
 
 proj_geom_vec = astra.geom_2vec(proj_geom)
@@ -39,7 +42,7 @@ neafModel.train()
 
 torchSino = torch.tensor(sinogram, dtype=torch.float32, requires_grad=True).reshape([projCount * detectorCount]).cuda()
 
-trainModel(neafModel, torchSino, detectorPixels, detectorCount, projCount)
+trainModel(neafModel, torchSino, detectorPixels, detectorCount, projCount, bboxMin, bboxMax)
 
 evalsamplePoints = np.zeros([256 * 256, 2], dtype=np.float32)
 for x in range(256):

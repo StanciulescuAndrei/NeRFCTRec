@@ -41,7 +41,34 @@ class NeAF(nn.Module):
         return out
     
 
-def renderRays(neaf_model, geometryDescriptor, batchSize, numSamplePoints):
+def getParametricIntersection(startPoint, endPoint, bboxMin, bboxMax):
+    ray_dir = endPoint - startPoint
+    ray_dir[ray_dir == 0] = 1e-8  # Avoid division by zero by adding a small epsilon
+
+    t_min = (bboxMin - startPoint) / ray_dir
+    t_max = (bboxMax - startPoint) / ray_dir
+
+    # Swap t_min and t_max where necessary
+    t1 = np.minimum(t_min, t_max)
+    t2 = np.maximum(t_min, t_max)
+
+    # Find the largest t_min and the smallest t_max
+    t_near = t1.max()
+    t_far = t2.min()
+
+    # Check for intersection
+    if t_near > t_far or t_far < 0:
+        return None  # No intersection
+    
+    intersection_points = []
+    if t_near >= 0:
+        intersection_points.append(startPoint + t_near * ray_dir)
+    if t_far >= 0:
+        intersection_points.append(startPoint + t_far * ray_dir)
+
+    return intersection_points
+
+def renderRays(neaf_model, geometryDescriptor, batchSize, numSamplePoints, bboxMin, bboxMax):
     # numSamplePoints x pixelCount x projectionCount
 
     samplePoints = []
@@ -51,6 +78,11 @@ def renderRays(neaf_model, geometryDescriptor, batchSize, numSamplePoints):
         for px in desc['pixels']:
             sp = np.array(desc['src'])
             ep = np.array(px)
+
+            recVolumeIntersections = getParametricIntersection(sp, ep, bboxMin, bboxMax)
+            if recVolumeIntersections != None and len(recVolumeIntersections) == 2:
+                sp, ep = recVolumeIntersections
+
             dt.append(np.linalg.norm(ep - sp) / numSamplePoints)
             for t in np.linspace(0, 1, numSamplePoints):
                 samplePoints.append(sp * (1.0 - t) + ep * t)
@@ -70,13 +102,13 @@ def renderRays(neaf_model, geometryDescriptor, batchSize, numSamplePoints):
         Tval = Tval * alpha
     return accum
 
-def trainModel(neafModel, groundTruth, detectorPixels, detectorCount, projCount):
+def trainModel(neafModel, groundTruth, detectorPixels, detectorCount, projCount, bboxMin, bboxMax):
     loss_fn = torch.nn.MSELoss()
     optimizer = torch.optim.SGD(neafModel.parameters(), lr=0.6, momentum=0.9)
 
-    for epoch in range(200):
+    for epoch in range(100):
         optimizer.zero_grad()
-        output = renderRays(neafModel, detectorPixels, detectorCount*projCount, 128)
+        output = renderRays(neafModel, detectorPixels, detectorCount*projCount, 128, bboxMin, bboxMax)
 
         loss = loss_fn(output, groundTruth)
         loss.backward()
