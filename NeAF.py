@@ -155,8 +155,9 @@ def trainModel(neafModel, groundTruth, detectorPixels, detectorCount, projCount,
 @torch.no_grad()
 def sampleModel(neafModel, samples, detectorPixels, detectorCount, projCount, bboxMin, bboxMax):
     output = neafModel(samples).detach().cpu()
-    sino = renderRays(neafModel, detectorPixels, detectorCount*projCount, 128, bboxMin, bboxMax).detach().cpu()
-    sino = sino.reshape([256, projCount])
+    sino = torch.zeros([256, projCount])
+    for i in range(projCount):
+        sino[:, i] = renderRays(neafModel, detectorPixels[i], detectorCount, 128, bboxMin, bboxMax).detach().cpu()
     output = torch.reshape(output, [256, 256])
-    return output, sino
+    return output, torch.transpose(sino, 0, 1)
     
