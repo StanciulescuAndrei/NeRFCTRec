@@ -7,7 +7,7 @@ from NeAF import *
 bboxMin = np.array([-128, -128])
 bboxMax = np.array([128, 128])
 
-proj_geom = astra.create_proj_geom('fanflat', 1.2, 256, np.linspace(0, 2.0 * np.pi, 6, endpoint=False), 10000, 200)
+proj_geom = astra.create_proj_geom('fanflat', 1.2, 256, np.linspace(0, np.pi, 30, endpoint=False), 10000, 200)
 vol_geom = astra.create_vol_geom(256, 256, bboxMin[0], bboxMax[0], bboxMin[1], bboxMax[1])
 proj_id = astra.create_projector('cuda', proj_geom, vol_geom)
 
@@ -51,13 +51,17 @@ for x in range(256):
         evalsamplePoints[x * 256 + y, 1] = y / 128.0 - 1.0
 evalSamples = torch.tensor(evalsamplePoints, requires_grad=False, dtype=torch.float32).cuda()
 
-output = sampleModel(neafModel, evalSamples)
+output, last_sino = sampleModel(neafModel, evalSamples, detectorPixels, detectorCount, projCount, bboxMin, bboxMax)
 
 plt.gray()
-plt.subplot(1, 2, 1)
+plt.subplot(1, 4, 1)
 plt.imshow(output)
-plt.subplot(1, 2, 2)
+plt.subplot(1, 4, 2)
 plt.imshow(V_exact)
+plt.subplot(1, 4, 3)
+plt.imshow(last_sino.reshape([projCount, 256]))
+plt.subplot(1, 4, 4)
+plt.imshow(sinogram)
 plt.show()
 
 

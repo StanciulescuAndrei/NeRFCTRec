@@ -11,18 +11,18 @@ class NeAF(nn.Module):
         self.numInputFeatures = numInputFeatures
         self.encodingDegree = encodingDegree
         self.block1 = nn.Sequential(
-            nn.Linear(2 * encodingDegree * self.numInputFeatures + 2, 256), nn.ReLU(),
-            nn.Linear(256, 256), nn.ReLU(),
-            nn.Linear(256, 256), nn.ReLU(),
-            nn.Linear(256, 256), nn.ReLU(),
+            nn.Linear(2 * encodingDegree * self.numInputFeatures + 2, 256), nn.LeakyReLU(),
+            nn.Linear(256, 256), nn.LeakyReLU(),
+            nn.Linear(256, 256), nn.LeakyReLU(),
+            nn.Linear(256, 256), nn.LeakyReLU(),
         )
         self.block2 = nn.Sequential(
-            nn.Linear(2 * encodingDegree * self.numInputFeatures + 2 + 256, 256), nn.ReLU(),
-            nn.Linear(256, 256), nn.ReLU(),
-            nn.Linear(256, 256), nn.ReLU(),
-            nn.Linear(256, 256), nn.ReLU(),
-            nn.Linear(256, 128), nn.ReLU(),
-            nn.Linear(128, 32), nn.ReLU(),
+            nn.Linear(2 * encodingDegree * self.numInputFeatures + 2 + 256, 256), nn.LeakyReLU(),
+            nn.Linear(256, 256), nn.LeakyReLU(),
+            nn.Linear(256, 256), nn.LeakyReLU(),
+            nn.Linear(256, 256), nn.LeakyReLU(),
+            nn.Linear(256, 128), nn.LeakyReLU(),
+            nn.Linear(128, 32), nn.LeakyReLU(),
             nn.Linear(32, 1), nn.LeakyReLU()
         )
 
@@ -74,16 +74,33 @@ def renderRays(neaf_model, geometryDescriptor, batchSize, numSamplePoints, bboxM
     samplePoints = []
     dt = []
 
-    for desc in geometryDescriptor:
-        for px in desc['pixels']:
-            sp = np.array(desc['src'])
+    if type(geometryDescriptor) == type(list()):
+        for desc in geometryDescriptor:
+            for px in desc['pixels']:
+                sp = np.array(desc['src'])
+                ep = np.array(px)
+
+                recVolumeIntersections = getParametricIntersection(sp, ep, bboxMin, bboxMax)
+                if recVolumeIntersections != None and len(recVolumeIntersections) == 2:
+                    sp, ep = recVolumeIntersections / (bboxMax - bboxMin) * 2.0
+                    dt.append(np.linalg.norm(ep - sp) / numSamplePoints)
+                else:
+                    dt.append(0.0)
+                
+                for t in np.linspace(0, 1, numSamplePoints):
+                    samplePoints.append(sp * (1.0 - t) + ep * t)
+    else:
+        for px in geometryDescriptor['pixels']:
+            sp = np.array(geometryDescriptor['src'])
             ep = np.array(px)
 
             recVolumeIntersections = getParametricIntersection(sp, ep, bboxMin, bboxMax)
             if recVolumeIntersections != None and len(recVolumeIntersections) == 2:
-                sp, ep = recVolumeIntersections
-
-            dt.append(np.linalg.norm(ep - sp) / numSamplePoints)
+                sp, ep = recVolumeIntersections / (bboxMax - bboxMin) * 2.0
+                dt.append(np.linalg.norm(ep - sp) / numSamplePoints)
+            else:
+                dt.append(0.0)
+            
             for t in np.linspace(0, 1, numSamplePoints):
                 samplePoints.append(sp * (1.0 - t) + ep * t)
                 
@@ -97,27 +114,49 @@ def renderRays(neaf_model, geometryDescriptor, batchSize, numSamplePoints, bboxM
     accum = torch.zeros(batchSize, dtype=torch.float32, requires_grad=True).cuda()
     Tval = torch.ones(batchSize).cuda()
     for sample in range(numSamplePoints):
-        alpha = torch.exp(-densities[:, sample] * dt).cuda()
-        accum = accum + Tval * (1 - alpha)
-        Tval = Tval * alpha
+        accum = accum + densities[:, sample] * dt
+        # alpha = torch.exp(-densities[:, sample] * dt).cuda()
+        # accum = accum + Tval * (1 - alpha)
+        # Tval = Tval * alpha
     return accum
 
 def trainModel(neafModel, groundTruth, detectorPixels, detectorCount, projCount, bboxMin, bboxMax):
+
+    batchSize = 3
     loss_fn = torch.nn.MSELoss()
-    optimizer = torch.optim.SGD(neafModel.parameters(), lr=0.6, momentum=0.9)
+    optimizer = torch.optim.SGD(neafModel.parameters(), lr=0.001, momentum=0.9)
+
+    neafModel.train(True)
 
     for epoch in range(100):
-        optimizer.zero_grad()
-        output = renderRays(neafModel, detectorPixels, detectorCount*projCount, 128, bboxMin, bboxMax)
+        running_loss = 0
+        for i in range(0, projCount, batchSize):
+            restrictedBatch = min(batchSize, projCount - i)
+            optimizer.zero_grad()
+            output = renderRays(neafModel, detectorPixels[i:i + restrictedBatch], detectorCount * restrictedBatch, 128, bboxMin, bboxMax)
 
-        loss = loss_fn(output, groundTruth)
-        loss.backward()
+            loss = loss_fn(output, groundTruth[detectorCount * i : detectorCount * (i + restrictedBatch)])
+            loss.backward()
 
-        optimizer.step()
+            optimizer.step()
+            running_loss += loss.item()
+        # for i, view in enumerate(detectorPixels):
+        #     optimizer.zero_grad()
+        #     output = renderRays(neafModel, view, detectorCount * 1, 128, bboxMin, bboxMax)
+
+        #     loss = loss_fn(output, groundTruth[detectorCount * i : detectorCount * (i + 1)])
+        #     loss.backward()
+
+        #     optimizer.step()
+        #     running_loss += loss.item()
+
         print(f"Epoch {epoch}: loss {loss}")
 
 @torch.no_grad()
-def sampleModel(neafModel, samples):
+def sampleModel(neafModel, samples, detectorPixels, detectorCount, projCount, bboxMin, bboxMax):
     output = neafModel(samples).detach().cpu()
+    sino = renderRays(neafModel, detectorPixels, detectorCount*projCount, 128, bboxMin, bboxMax).detach().cpu()
+    sino = sino.reshape([256, projCount])
     output = torch.reshape(output, [256, 256])
-    return output
+    return output, sino
+    
