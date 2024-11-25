@@ -2,12 +2,13 @@ import astra
 import matplotlib.pyplot as plt
 import numpy as np
 from NeAF import *
+import wandb
 
 # create geometries and projector
 bboxMin = np.array([-128, -128])
 bboxMax = np.array([128, 128])
 
-proj_geom = astra.create_proj_geom('fanflat', 1.2, 256, np.linspace(0, np.pi, 30, endpoint=False), 10000, 200)
+proj_geom = astra.create_proj_geom('fanflat', 1, 256, np.linspace(0, np.pi, 60, endpoint=False), 10000, 200)
 vol_geom = astra.create_vol_geom(256, 256, bboxMin[0], bboxMax[0], bboxMin[1], bboxMax[1])
 proj_id = astra.create_projector('cuda', proj_geom, vol_geom)
 
@@ -38,11 +39,14 @@ for descriptor in  vectors:
 torch.set_grad_enabled(True)
 
 neafModel = NeAF(numInputFeatures=2, encodingDegree=8).cuda()
+
 neafModel.train()
 
 torchSino = torch.tensor(sinogram, dtype=torch.float32, requires_grad=True).reshape([projCount * detectorCount]).cuda()
 
 trainModel(neafModel, torchSino, detectorPixels, detectorCount, projCount, bboxMin, bboxMax)
+
+torch.save(neafModel.state_dict(), "checkpoint")
 
 evalsamplePoints = np.zeros([256 * 256, 2], dtype=np.float32)
 for x in range(256):
@@ -55,9 +59,9 @@ output, last_sino = sampleModel(neafModel, evalSamples, detectorPixels, detector
 
 plt.gray()
 plt.subplot(1, 4, 1)
-plt.imshow(output)
-plt.subplot(1, 4, 2)
 plt.imshow(V_exact)
+plt.subplot(1, 4, 2)
+plt.imshow(output)
 plt.subplot(1, 4, 3)
 plt.imshow(last_sino)
 plt.subplot(1, 4, 4)

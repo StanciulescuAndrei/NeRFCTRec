@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import numpy as np
 import math
+import wandb
 
 class NeAF(nn.Module):
     def __init__(self, numInputFeatures, encodingDegree):
@@ -74,35 +75,32 @@ def renderRays(neaf_model, geometryDescriptor, batchSize, numSamplePoints, bboxM
     samplePoints = []
     dt = []
 
-    if type(geometryDescriptor) == type(list()):
-        for desc in geometryDescriptor:
-            for px in desc['pixels']:
-                sp = np.array(desc['src'])
+    rng = np.random.default_rng()
+
+    def samplingGenerator(descriptor, rng, samplePoints, dt):
+        for px in descriptor['pixels']:
+                sp = np.array(descriptor['src'])
                 ep = np.array(px)
 
                 recVolumeIntersections = getParametricIntersection(sp, ep, bboxMin, bboxMax)
+                disturbAmount = 0.05
                 if recVolumeIntersections != None and len(recVolumeIntersections) == 2:
                     sp, ep = recVolumeIntersections / (bboxMax - bboxMin) * 2.0
+                    disturbAmount = disturbAmount * np.linalg.norm(ep - sp) / numSamplePoints
                     dt.append(np.linalg.norm(ep - sp) / numSamplePoints)
                 else:
                     dt.append(0.0)
                 
                 for t in np.linspace(0, 1, numSamplePoints):
-                    samplePoints.append(sp * (1.0 - t) + ep * t)
-    else:
-        for px in geometryDescriptor['pixels']:
-            sp = np.array(geometryDescriptor['src'])
-            ep = np.array(px)
+                    samplePoints.append(sp * (1.0 - t) + ep * t + disturbAmount * dt[-1] * rng.standard_normal(2))
 
-            recVolumeIntersections = getParametricIntersection(sp, ep, bboxMin, bboxMax)
-            if recVolumeIntersections != None and len(recVolumeIntersections) == 2:
-                sp, ep = recVolumeIntersections / (bboxMax - bboxMin) * 2.0
-                dt.append(np.linalg.norm(ep - sp) / numSamplePoints)
-            else:
-                dt.append(0.0)
-            
-            for t in np.linspace(0, 1, numSamplePoints):
-                samplePoints.append(sp * (1.0 - t) + ep * t)
+        return samplePoints, dt
+
+    if type(geometryDescriptor) == type(list()):
+        for desc in geometryDescriptor:
+            samplePoints, dt = samplingGenerator(desc, rng, samplePoints, dt)
+    else:
+        samplePoints, dt = samplingGenerator(geometryDescriptor, rng, samplePoints, dt)
                 
 
     samplePoints = torch.tensor(np.array(samplePoints), dtype=torch.float32, requires_grad=True).squeeze(1).cuda()
@@ -122,13 +120,13 @@ def renderRays(neaf_model, geometryDescriptor, batchSize, numSamplePoints, bboxM
 
 def trainModel(neafModel, groundTruth, detectorPixels, detectorCount, projCount, bboxMin, bboxMax):
 
-    batchSize = 3
+    batchSize = 5
     loss_fn = torch.nn.MSELoss()
     optimizer = torch.optim.SGD(neafModel.parameters(), lr=0.001, momentum=0.9)
 
     neafModel.train(True)
 
-    for epoch in range(100):
+    for epoch in range(500):
         running_loss = 0
         for i in range(0, projCount, batchSize):
             restrictedBatch = min(batchSize, projCount - i)
@@ -140,16 +138,6 @@ def trainModel(neafModel, groundTruth, detectorPixels, detectorCount, projCount,
 
             optimizer.step()
             running_loss += loss.item()
-        # for i, view in enumerate(detectorPixels):
-        #     optimizer.zero_grad()
-        #     output = renderRays(neafModel, view, detectorCount * 1, 128, bboxMin, bboxMax)
-
-        #     loss = loss_fn(output, groundTruth[detectorCount * i : detectorCount * (i + 1)])
-        #     loss.backward()
-
-        #     optimizer.step()
-        #     running_loss += loss.item()
-
         print(f"Epoch {epoch}: loss {loss}")
 
 @torch.no_grad()
@@ -159,5 +147,5 @@ def sampleModel(neafModel, samples, detectorPixels, detectorCount, projCount, bb
     for i in range(projCount):
         sino[:, i] = renderRays(neafModel, detectorPixels[i], detectorCount, 128, bboxMin, bboxMax).detach().cpu()
     output = torch.reshape(output, [256, 256])
-    return output, torch.transpose(sino, 0, 1)
+    return torch.transpose(output, 0, 1), torch.transpose(sino, 0, 1)
     
