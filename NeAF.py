@@ -69,44 +69,21 @@ def getParametricIntersection(startPoint, endPoint, bboxMin, bboxMax):
 
     return intersection_points
 
-def renderRays(neaf_model, geometryDescriptor, batchSize, numSamplePoints, bboxMin, bboxMax):
+def renderRays(neaf_model, allSamplePoints, batchSize, numSamplePoints, shouldRanzomize):
     # numSamplePoints x pixelCount x projectionCount
 
     samplePoints = []
     dt = []
-
-    rng = np.random.default_rng()
-
-    def samplingGenerator(descriptor, rng, samplePoints, dt):
-        for px in descriptor['pixels']:
-                sp = np.array(descriptor['src'])
-                ep = np.array(px)
-
-                recVolumeIntersections = getParametricIntersection(sp, ep, bboxMin, bboxMax)
-                disturbAmount = 0.05
-                if recVolumeIntersections != None and len(recVolumeIntersections) == 2:
-                    sp, ep = recVolumeIntersections / (bboxMax - bboxMin) * 2.0
-                    disturbAmount = disturbAmount * np.linalg.norm(ep - sp) / numSamplePoints
-                    dt.append(np.linalg.norm(ep - sp) / numSamplePoints)
-                else:
-                    dt.append(0.0)
+    for view in allSamplePoints:
+        samplePoints += view[0]
+        dt += view[1]
                 
-                for t in np.linspace(0, 1, numSamplePoints):
-                    samplePoints.append(sp * (1.0 - t) + ep * t + disturbAmount * dt[-1] * rng.standard_normal(2))
-
-        return samplePoints, dt
-
-    if type(geometryDescriptor) == type(list()):
-        for desc in geometryDescriptor:
-            samplePoints, dt = samplingGenerator(desc, rng, samplePoints, dt)
-    else:
-        samplePoints, dt = samplingGenerator(geometryDescriptor, rng, samplePoints, dt)
-                
-
     samplePoints = torch.tensor(np.array(samplePoints), dtype=torch.float32, requires_grad=True).squeeze(1).cuda()
-    densities = neaf_model(samplePoints)
     dt = torch.tensor(np.array(dt), dtype=torch.float32, requires_grad=True).cuda()
-
+    if shouldRanzomize:
+        samplePoints += torch.rand(samplePoints.shape, device=torch.device('cuda')) * torch.min(dt) * 0.05
+    densities = neaf_model(samplePoints)
+    
     densities = densities.view(batchSize, numSamplePoints)
 
     accum = torch.zeros(batchSize, dtype=torch.float32, requires_grad=True).cuda()
@@ -118,7 +95,7 @@ def renderRays(neaf_model, geometryDescriptor, batchSize, numSamplePoints, bboxM
         # Tval = Tval * alpha
     return accum
 
-def trainModel(neafModel, groundTruth, detectorPixels, detectorCount, projCount, bboxMin, bboxMax):
+def trainModel(neafModel, groundTruth, allSamplePoints, detectorCount, projCount):
 
     batchSize = 5
     loss_fn = torch.nn.MSELoss()
@@ -126,12 +103,12 @@ def trainModel(neafModel, groundTruth, detectorPixels, detectorCount, projCount,
 
     neafModel.train(True)
 
-    for epoch in range(500):
+    for epoch in range(200):
         running_loss = 0
         for i in range(0, projCount, batchSize):
             restrictedBatch = min(batchSize, projCount - i)
             optimizer.zero_grad()
-            output = renderRays(neafModel, detectorPixels[i:i + restrictedBatch], detectorCount * restrictedBatch, 128, bboxMin, bboxMax)
+            output = renderRays(neafModel, allSamplePoints[i:i + restrictedBatch], detectorCount * restrictedBatch, 128, True)
 
             loss = loss_fn(output, groundTruth[detectorCount * i : detectorCount * (i + restrictedBatch)])
             loss.backward()
@@ -141,11 +118,13 @@ def trainModel(neafModel, groundTruth, detectorPixels, detectorCount, projCount,
         print(f"Epoch {epoch}: loss {loss}")
 
 @torch.no_grad()
-def sampleModel(neafModel, samples, detectorPixels, detectorCount, projCount, bboxMin, bboxMax):
+def sampleModel(neafModel, samples, allSamplePoints, detectorCount, projCount):
     output = neafModel(samples).detach().cpu()
     sino = torch.zeros([256, projCount])
-    for i in range(projCount):
-        sino[:, i] = renderRays(neafModel, detectorPixels[i], detectorCount, 128, bboxMin, bboxMax).detach().cpu()
+    batchSize = 5
+    for i in range(0, projCount, batchSize):
+        restrictedBatch = min(batchSize, projCount - i)
+        sino[:, i:i + restrictedBatch] = torch.reshape(renderRays(neafModel, allSamplePoints[i:i + restrictedBatch], detectorCount * restrictedBatch, 128, False).detach().cpu(), [restrictedBatch, 256]).transpose(0, 1)
     output = torch.reshape(output, [256, 256])
     return torch.transpose(output, 0, 1), torch.transpose(sino, 0, 1)
     

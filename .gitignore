@@ -12,3 +12,5 @@ wandb/run-20241125_182101-prjjihy2/files/wandb-summary.json
 wandb/run-20241125_182101-prjjihy2/logs/debug-core.log
 wandb/run-20241125_182101-prjjihy2/logs/debug-internal.log
 wandb/run-20241125_182101-prjjihy2/logs/debug.log
+checkpoint
+log.txt

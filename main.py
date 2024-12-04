@@ -4,11 +4,30 @@ import numpy as np
 from NeAF import *
 import wandb
 
+def samplingGenerator(descriptor, numSamplePoints):
+    samplePoints = []
+    dt = []
+    for px in descriptor['pixels']:
+            sp = np.array(descriptor['src'])
+            ep = np.array(px)
+
+            recVolumeIntersections = getParametricIntersection(sp, ep, bboxMin, bboxMax)
+            if recVolumeIntersections != None and len(recVolumeIntersections) == 2:
+                sp, ep = recVolumeIntersections / (bboxMax - bboxMin) * 2.0
+                dt.append(np.linalg.norm(ep - sp) / numSamplePoints)
+            else:
+                dt.append(0.0)
+            
+            for t in np.linspace(0, 1, numSamplePoints):
+                samplePoints.append(sp * (1.0 - t) + ep * t)
+
+    return samplePoints, dt
+
 # create geometries and projector
 bboxMin = np.array([-128, -128])
 bboxMax = np.array([128, 128])
 
-proj_geom = astra.create_proj_geom('fanflat', 1, 256, np.linspace(0, np.pi, 60, endpoint=False), 10000, 200)
+proj_geom = astra.create_proj_geom('fanflat', 1, 256, np.linspace(0, 2 * np.pi, 12, endpoint=False), 10000, 200)
 vol_geom = astra.create_vol_geom(256, 256, bboxMin[0], bboxMax[0], bboxMin[1], bboxMax[1])
 proj_id = astra.create_projector('cuda', proj_geom, vol_geom)
 
@@ -36,6 +55,13 @@ for descriptor in  vectors:
         rotationalArray['pixels'].append((i - detectorCount / 2.0) * v[4:6] + v[2:4])
     detectorPixels.append(rotationalArray)
 
+numSamplePoints = 128
+
+allSamplePoints = []
+
+for descriptor in detectorPixels:
+    allSamplePoints.append(tuple(samplingGenerator(descriptor, numSamplePoints)))
+
 torch.set_grad_enabled(True)
 
 neafModel = NeAF(numInputFeatures=2, encodingDegree=8).cuda()
@@ -44,7 +70,7 @@ neafModel.train()
 
 torchSino = torch.tensor(sinogram, dtype=torch.float32, requires_grad=True).reshape([projCount * detectorCount]).cuda()
 
-trainModel(neafModel, torchSino, detectorPixels, detectorCount, projCount, bboxMin, bboxMax)
+trainModel(neafModel, torchSino, allSamplePoints, detectorCount, projCount)
 
 torch.save(neafModel.state_dict(), "checkpoint")
 
@@ -55,7 +81,7 @@ for x in range(256):
         evalsamplePoints[x * 256 + y, 1] = y / 128.0 - 1.0
 evalSamples = torch.tensor(evalsamplePoints, requires_grad=False, dtype=torch.float32).cuda()
 
-output, last_sino = sampleModel(neafModel, evalSamples, detectorPixels, detectorCount, projCount, bboxMin, bboxMax)
+output, last_sino = sampleModel(neafModel, evalSamples, allSamplePoints, detectorCount, projCount)
 
 plt.gray()
 plt.subplot(1, 4, 1)
