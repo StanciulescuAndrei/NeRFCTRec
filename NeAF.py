@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.optim.lr_scheduler import StepLR
 import matplotlib.pyplot as plt
 import numpy as np
 import math
-import wandb
 
 class NeAF(nn.Module):
     def __init__(self, numInputFeatures, encodingDegree):
@@ -14,14 +14,14 @@ class NeAF(nn.Module):
         self.block1 = nn.Sequential(
             nn.Linear(2 * encodingDegree * self.numInputFeatures + 2, 256), nn.LeakyReLU(),
             nn.Linear(256, 256), nn.LeakyReLU(),
-            nn.Linear(256, 256), nn.LeakyReLU(),
-            nn.Linear(256, 256), nn.LeakyReLU(),
+            # nn.Linear(256, 256), nn.LeakyReLU(),
+            # nn.Linear(256, 256), nn.LeakyReLU(),
         )
         self.block2 = nn.Sequential(
             nn.Linear(2 * encodingDegree * self.numInputFeatures + 2 + 256, 256), nn.LeakyReLU(),
-            nn.Linear(256, 256), nn.LeakyReLU(),
-            nn.Linear(256, 256), nn.LeakyReLU(),
-            nn.Linear(256, 256), nn.LeakyReLU(),
+            # nn.Linear(256, 256), nn.LeakyReLU(),
+            # nn.Linear(256, 256), nn.LeakyReLU(),
+            # nn.Linear(256, 256), nn.LeakyReLU(),
             nn.Linear(256, 128), nn.LeakyReLU(),
             nn.Linear(128, 32), nn.LeakyReLU(),
             nn.Linear(32, 1), nn.LeakyReLU()
@@ -97,13 +97,14 @@ def renderRays(neaf_model, allSamplePoints, batchSize, numSamplePoints, shouldRa
 
 def trainModel(neafModel, groundTruth, allSamplePoints, detectorCount, projCount):
 
-    batchSize = 5
+    batchSize = 10
     loss_fn = torch.nn.MSELoss()
     optimizer = torch.optim.SGD(neafModel.parameters(), lr=0.001, momentum=0.9)
+    scheduler = StepLR(optimizer, step_size=100, gamma=0.8)
 
     neafModel.train(True)
 
-    for epoch in range(200):
+    for epoch in range(1000):
         running_loss = 0
         for i in range(0, projCount, batchSize):
             restrictedBatch = min(batchSize, projCount - i)
@@ -114,8 +115,9 @@ def trainModel(neafModel, groundTruth, allSamplePoints, detectorCount, projCount
             loss.backward()
 
             optimizer.step()
+            scheduler.step()
             running_loss += loss.item()
-        print(f"Epoch {epoch}: loss {loss}")
+        print(f"Epoch {epoch}: loss per projection {loss / projCount}")
 
 @torch.no_grad()
 def sampleModel(neafModel, samples, allSamplePoints, detectorCount, projCount):
