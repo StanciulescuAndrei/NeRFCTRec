@@ -17,6 +17,8 @@ class NeAF(nn.Module):
         self.block1 = nn.Sequential(
             nn.Linear(2 * encodingDegree * self.numInputFeatures + 2, 256), nn.LeakyReLU(),
             nn.Linear(256, 256), nn.LeakyReLU(),
+            nn.Linear(256, 256), nn.LeakyReLU(),
+            nn.Linear(256, 256), nn.LeakyReLU(),
         )
         self.block2 = nn.Sequential(
             nn.Linear(2 * encodingDegree * self.numInputFeatures + 2 + 256, 256), nn.LeakyReLU(),
@@ -77,7 +79,7 @@ class ScanningGeometry:
 
                 recVolumeIntersections = self.getParametricIntersection(sp, ep, self.bboxMin, self.bboxMax)
                 if recVolumeIntersections != None and len(recVolumeIntersections) == 2:
-                    sp, ep = recVolumeIntersections / (self.bboxMax - self.bboxMin) * 2.0
+                    sp, ep = recVolumeIntersections / (self.bboxMax - self.bboxMin) # * 2.0
                     dt.append(np.linalg.norm(ep - sp) / numSamplePoints)
                 else:
                     dt.append(0.0)
@@ -139,7 +141,7 @@ def renderRays(neaf_model, allSamplePoints, batchSize, numSamplePoints, shouldRa
     samplePoints = torch.tensor(np.array(samplePoints), dtype=torch.float32, requires_grad=True).squeeze(1).cuda()
     dt = torch.tensor(np.array(dt), dtype=torch.float32, requires_grad=True).cuda()
     if shouldRanzomize:
-        samplePoints += torch.rand(samplePoints.shape, device=torch.device('cuda')) * torch.min(dt) * 0.05
+        samplePoints += torch.rand(samplePoints.shape, device=torch.device('cuda')) * torch.min(dt) * 0.1
     densities = neaf_model(samplePoints)
     
     densities = densities.view(batchSize, numSamplePoints)

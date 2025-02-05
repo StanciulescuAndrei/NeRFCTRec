@@ -7,7 +7,7 @@ from NeAF import *
 bboxMin = np.array([-128, -128])
 bboxMax = np.array([128, 128])
 
-proj_geom = astra.create_proj_geom('fanflat', 1, 256, np.linspace(0, 2 * np.pi, 7, endpoint=False), 10000, 200)
+proj_geom = astra.create_proj_geom('fanflat', 1, 256, np.linspace(0, 2 * np.pi, 36, endpoint=False), 10000, 200)
 vol_geom = astra.create_vol_geom(256, 256, bboxMin[0], bboxMax[0], bboxMin[1], bboxMax[1])
 proj_id = astra.create_projector('cuda', proj_geom, vol_geom)
 
