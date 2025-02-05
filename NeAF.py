@@ -24,7 +24,7 @@ class NeAF(nn.Module):
             nn.Linear(2 * encodingDegree * self.numInputFeatures + 2 + 256, 256), nn.LeakyReLU(),
             nn.Linear(256, 128), nn.LeakyReLU(),
             nn.Linear(128, 32), nn.LeakyReLU(),
-            nn.Linear(32, 1), nn.LeakyReLU()
+            nn.Linear(32, 1)
         )
 
     @staticmethod
@@ -35,10 +35,14 @@ class NeAF(nn.Module):
             out.append(torch.cos(2 ** i * x))
         return torch.cat(out, dim=1)
 
-    def forward(self, x):
+    def forward(self, x, trueRange = False):
         emb_x = self.positionalEncoding(x, self.encodingDegree)
         h = self.block1(emb_x)
         out = self.block2(torch.cat((h, emb_x), dim=1))
+        if trueRange:
+            out = nn.ReLU().forward(out)
+        else:
+            out = nn.LeakyReLU().forward(out)
         return out
     
 class ScanningGeometry:
@@ -72,6 +76,7 @@ class ScanningGeometry:
 
     def getSamples(self, viewRange):
         t_param = torch.linspace(0, 1, self.numSamplePoints, device="cuda").view(1, self.numSamplePoints, 1)
+        t_param = t_param + (torch.rand(self.numSamplePoints, device="cuda").view(1, self.numSamplePoints, 1) * 2.0 - 1.0) * (1.0 / self.numSamplePoints) * 0.1
 
         viewRangeStart = viewRange[0] * self.getDetectorCount()
         viewRangeEnd   = viewRange[1] * self.getDetectorCount()
@@ -130,14 +135,12 @@ class ScanningGeometry:
         return self.numSamplePoints
 
             
-def renderRays(neaf_model, scanningGeometry: ScanningGeometry, viewRange, shouldRanzomize):
+def renderRays(neaf_model, scanningGeometry: ScanningGeometry, viewRange, trueValueRange = False):
     samplePoints, dt = scanningGeometry.getSamples(viewRange)
                 
     samplePoints = samplePoints.flatten(0, 1)
 
-    if shouldRanzomize:
-        samplePoints += torch.rand(samplePoints.shape, device=torch.device('cuda')) * torch.min(dt) * 0.1
-    densities = neaf_model(samplePoints)
+    densities = neaf_model(samplePoints, False)
     
     densities = densities.view( int(densities.shape[0] / scanningGeometry.getNumSamples()), scanningGeometry.getNumSamples())
 
@@ -160,12 +163,12 @@ def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
     lossArray = []
 
-    for epoch in range(100):
+    for epoch in range(600):
         runningLoss = 0
         viewRange = [0, viewsPerBatch]
         while viewRange[0] < scanningGeometry.getProjCount():
             optimizer.zero_grad()
-            output = renderRays(neafModel, scanningGeometry, viewRange, True)
+            output = renderRays(neafModel, scanningGeometry, viewRange, epoch > 200)
 
             loss = loss_fn(output, groundTruth[viewRange[0] * scanningGeometry.getDetectorCount():viewRange[1] * scanningGeometry.getDetectorCount()])
             loss.backward()
@@ -191,7 +194,7 @@ def sampleModel(neafModel, samples, scanningGeometry: ScanningGeometry):
     viewRange = [0, viewsPerBatch]
     sino = torch.zeros([256, scanningGeometry.getProjCount()])
     while viewRange[0] < scanningGeometry.getProjCount():
-        partialSino = renderRays(neafModel, scanningGeometry, viewRange, False).detach().cpu()
+        partialSino = renderRays(neafModel, scanningGeometry, viewRange).detach().cpu()
         sino[:, viewRange[0]:viewRange[1]] = torch.reshape(partialSino, [viewRange[1] - viewRange[0], 256]).transpose(0, 1)
         viewRange = [viewRange[0] + viewsPerBatch, min(viewRange[1] + viewsPerBatch, scanningGeometry.getProjCount())]
     output = torchvision.transforms.functional.hflip(torch.reshape(output, [256, 256]))
