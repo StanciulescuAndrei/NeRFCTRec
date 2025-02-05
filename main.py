@@ -19,7 +19,7 @@ V_exact_id, V_exact = astra.data2d.shepp_logan(vol_geom)
 # create forward projection
 sinogram_id, sinogram = astra.create_sino(V_exact, proj_id)
 
-numSamplePoints = 128
+numSamplePoints = 256
 
 scanningGeometry = ScanningGeometry(proj_geom_vec, bboxMin, bboxMax, numSamplePoints)
 
