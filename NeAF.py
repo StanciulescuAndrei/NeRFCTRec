@@ -75,17 +75,22 @@ class ScanningGeometry:
         return intersection_points
 
     def getSamples(self, viewRange):
-        t_param = torch.linspace(0, 1, self.numSamplePoints, device="cuda").view(1, self.numSamplePoints, 1)
-        t_param = t_param + (torch.rand(self.numSamplePoints, device="cuda").view(1, self.numSamplePoints, 1) * 2.0 - 1.0) * (1.0 / self.numSamplePoints) * 0.1
+        # t_param = torch.linspace(0, 1, self.numSamplePoints + 1, device="cuda").view(1, self.numSamplePoints + 1, 1)
+        # t_param = t_param + (torch.rand(self.numSamplePoints + 1, device="cuda").view(1, self.numSamplePoints + 1, 1) * 2.0 - 1.0) * (1.0 / self.numSamplePoints) * 0.1
+
+        t_param = torch.rand(self.numSamplePoints + 1, device="cuda").view(1, self.numSamplePoints + 1, 1)
+        t_param, _ = torch.sort(t_param, dim= 1)
+        t_param[:, 0, :] = 0.0
+        t_param[:, -1, :] = 1.0
 
         viewRangeStart = viewRange[0] * self.getDetectorCount()
         viewRangeEnd   = viewRange[1] * self.getDetectorCount()
 
         samplePoints = self.z_start[viewRangeStart:viewRangeEnd, None, :] + t_param * (self.z_end[viewRangeStart:viewRangeEnd, None, :] - self.z_start[viewRangeStart:viewRangeEnd, None, :])
 
-        dt = torch.norm(self.z_end[viewRangeStart:viewRangeEnd, :] - self.z_start[viewRangeStart:viewRangeEnd, :], dim=1) / self.numSamplePoints
+        dt = torch.norm(samplePoints[:, 1:, :] - samplePoints[:, :-1, :], dim=2)
 
-        return samplePoints, dt
+        return samplePoints[:, :self.numSamplePoints, :], dt
 
     def __init__(self, projectorGeometryVector, bboxMin, bboxMax, numSamplePoints):
         self.bboxMin = bboxMin
@@ -133,6 +138,9 @@ class ScanningGeometry:
     
     def getNumSamples(self):
         return self.numSamplePoints
+    
+    def setNumSamples(self, ns):
+        self.numSamplePoints = ns
 
             
 def renderRays(neaf_model, scanningGeometry: ScanningGeometry, viewRange, trueValueRange = False):
@@ -144,31 +152,31 @@ def renderRays(neaf_model, scanningGeometry: ScanningGeometry, viewRange, trueVa
     
     densities = densities.view( int(densities.shape[0] / scanningGeometry.getNumSamples()), scanningGeometry.getNumSamples())
 
-    accum = torch.zeros(densities.shape[0], dtype=torch.float32, requires_grad=True).cuda()
-    for sample in range(scanningGeometry.getNumSamples()):
-        accum = accum + densities[:, sample] * dt 
+    # accum = torch.zeros(densities.shape[0], dtype=torch.float32, requires_grad=True).cuda()
+    accum = torch.sum(densities * dt, dim=1)
     return accum
 
 def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
-    maxSamples = 256 * 6 * 128 # Experimental max samples fitting on the GPU
+    maxSamples = 256 * 7 * 128 # Experimental max samples fitting on the GPU
 
     viewsPerBatch = int(np.floor(maxSamples / (scanningGeometry.getDetectorCount() * scanningGeometry.getNumSamples())))
 
     loss_fn = torch.nn.MSELoss()
     optimizer = torch.optim.SGD(neafModel.parameters(), lr=0.001, momentum=0.9)
-    scheduler = StepLR(optimizer, step_size=100, gamma=0.8)
+    scheduler = StepLR(optimizer, step_size=100, gamma=0.9)
 
     neafModel.train(True)
 
     lossArray = []
 
-    for epoch in range(600):
+    for epoch in range(2000):
         runningLoss = 0
         viewRange = [0, viewsPerBatch]
+        
         while viewRange[0] < scanningGeometry.getProjCount():
             optimizer.zero_grad()
-            output = renderRays(neafModel, scanningGeometry, viewRange, epoch > 200)
+            output = renderRays(neafModel, scanningGeometry, viewRange)
 
             loss = loss_fn(output, groundTruth[viewRange[0] * scanningGeometry.getDetectorCount():viewRange[1] * scanningGeometry.getDetectorCount()])
             loss.backward()
@@ -192,10 +200,10 @@ def sampleModel(neafModel, samples, scanningGeometry: ScanningGeometry):
     viewsPerBatch = int(np.floor(maxSamples / (scanningGeometry.getDetectorCount() * scanningGeometry.getNumSamples())))
 
     viewRange = [0, viewsPerBatch]
-    sino = torch.zeros([256, scanningGeometry.getProjCount()])
+    sino = torch.zeros([scanningGeometry.getDetectorCount(), scanningGeometry.getProjCount()])
     while viewRange[0] < scanningGeometry.getProjCount():
         partialSino = renderRays(neafModel, scanningGeometry, viewRange).detach().cpu()
-        sino[:, viewRange[0]:viewRange[1]] = torch.reshape(partialSino, [viewRange[1] - viewRange[0], 256]).transpose(0, 1)
+        sino[:, viewRange[0]:viewRange[1]] = torch.reshape(partialSino, [viewRange[1] - viewRange[0], scanningGeometry.getDetectorCount()]).transpose(0, 1)
         viewRange = [viewRange[0] + viewsPerBatch, min(viewRange[1] + viewsPerBatch, scanningGeometry.getProjCount())]
     output = torchvision.transforms.functional.hflip(torch.reshape(output, [256, 256]))
     return torch.transpose(output, 0, 1), torch.transpose(sino, 0, 1)
