@@ -27,8 +27,8 @@ torch.set_grad_enabled(True)
 
 neafModel = NeAF(numInputFeatures=2, encodingDegree=8).cuda()
 
-checkpoint = torch.load("checkpoint", map_location="cuda")
-neafModel.load_state_dict(checkpoint)
+# checkpoint = torch.load("checkpoint", map_location="cuda")
+# neafModel.load_state_dict(checkpoint)
 
 neafModel.train()
 
