@@ -75,11 +75,9 @@ class ScanningGeometry:
         return intersection_points
 
     def getSamples(self, viewRange):
-        # t_param = torch.linspace(0, 1, self.numSamplePoints + 1, device="cuda").view(1, self.numSamplePoints + 1, 1)
-        # t_param = t_param + (torch.rand(self.numSamplePoints + 1, device="cuda").view(1, self.numSamplePoints + 1, 1) * 2.0 - 1.0) * (1.0 / self.numSamplePoints) * 0.1
+        t_param = torch.linspace(0, 1, self.numSamplePoints + 1, device="cuda").view(1, self.numSamplePoints + 1, 1)
+        t_param = t_param + (torch.rand(self.numSamplePoints + 1, device="cuda").view(1, self.numSamplePoints + 1, 1) * 2.0 - 1.0) * (1.0 / self.numSamplePoints) * 0.45
 
-        t_param = torch.rand(self.numSamplePoints + 1, device="cuda").view(1, self.numSamplePoints + 1, 1)
-        t_param, _ = torch.sort(t_param, dim= 1)
         t_param[:, 0, :] = 0.0
         t_param[:, -1, :] = 1.0
 
