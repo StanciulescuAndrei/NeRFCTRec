@@ -9,6 +9,7 @@ import math
 import astra
 import torchvision.transforms.functional
 from NeAF import NeAF
+from NHGrid import NHGrid
     
 class ScanningGeometry:
     @staticmethod
@@ -120,19 +121,19 @@ def renderRays(neaf_model, scanningGeometry: ScanningGeometry, viewRange, trueVa
 
 def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
-    maxSamples = 256 * 7 * 128 # Experimental max samples fitting on the GPU
+    maxSamples = 256 * 70 * 128 # Experimental max samples fitting on the GPU
 
     viewsPerBatch = int(np.floor(maxSamples / (scanningGeometry.getDetectorCount() * scanningGeometry.getNumSamples())))
 
     loss_fn = torch.nn.MSELoss()
-    optimizer = torch.optim.SGD(neafModel.parameters(), lr=0.001, momentum=0.9)
-    scheduler = StepLR(optimizer, step_size=100, gamma=0.9)
+    optimizer = torch.optim.Adam(neafModel.parameters(), eps=1e-15)
+    scheduler = StepLR(optimizer, step_size=1000, gamma=0.8)
 
     neafModel.train(True)
 
     lossArray = []
 
-    for epoch in range(2000):
+    for epoch in range(3000):
         runningLoss = 0
         viewRange = [0, viewsPerBatch]
         

@@ -25,7 +25,7 @@ def setupGeometry(resolution, numProjections, numPixels):
 
 if __name__=="__main__":
     resolution = 256
-    numProjections = 36
+    numProjections = 72
     numPixels = 256
     numSamplePoints = 128
 
@@ -34,24 +34,26 @@ if __name__=="__main__":
     scanningGeometry = ScanningGeometry(proj_geom_vec, bboxMin, bboxMax, numSamplePoints)
 
     torch.set_grad_enabled(True)
-    neafModel = NeAF(numInputFeatures=2, encodingDegree=8).cuda()
+    # neafModel = NeAF(numInputFeatures=2, encodingDegree=8).cuda()
+
+    nhmodel = NHGrid(numInputFeatures=2, numGridFeatures=2, gridLevels=8, hashSize=2**17).cuda()
 
     # checkpoint = torch.load("checkpoint", map_location="cuda")
     # neafModel.load_state_dict(checkpoint)
 
-    neafModel.train()
+    nhmodel.train()
 
     torchSino = torch.tensor(sinogram, dtype=torch.float32, requires_grad=True).reshape([scanningGeometry.getSinoNumberOfPixels()]).cuda()
 
-    lossArray = trainModel(neafModel, torchSino, scanningGeometry)
+    lossArray = trainModel(nhmodel, torchSino, scanningGeometry)
 
-    torch.save(neafModel.state_dict(), "checkpoint")
+    torch.save(nhmodel.state_dict(), "checkpoint")
 
 
     plt.plot(lossArray)
     plt.show()
 
-    output = sampleModel(neafModel, resolution)
+    output = sampleModel(nhmodel, resolution)
 
     plt.gray()
     plt.subplot(1, 2, 1)
