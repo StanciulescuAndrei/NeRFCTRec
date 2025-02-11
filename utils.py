@@ -133,7 +133,7 @@ def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
     lossArray = []
 
-    for epoch in range(300):
+    for epoch in range(10000):
         runningLoss = 0
         viewRange = [0, viewsPerBatch]
         
@@ -175,8 +175,8 @@ def sampleModel(neafModel, resolution):
     evalSamplePoints = np.zeros([resolution * resolution, 2], dtype=np.float32)
     for x in range(resolution):
         for y in range(resolution):
-            evalSamplePoints[x * resolution + y, 0] = x / resolution / 2.0 - 1.0
-            evalSamplePoints[x * resolution + y, 1] = y / resolution / 2.0 - 1.0
+            evalSamplePoints[x * resolution + y, 0] = x / resolution * 2.0 - 1.0
+            evalSamplePoints[x * resolution + y, 1] = y / resolution * 2.0 - 1.0
 
     evalSamples = torch.tensor(evalSamplePoints, requires_grad=False, dtype=torch.float32).cuda()
 
