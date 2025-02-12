@@ -9,7 +9,26 @@ import math
 import astra
 import torchvision.transforms.functional
 from NeAF import NeAF
+from NHGrid import NHGrid
     
+class TotalVariationLoss(nn.Module):
+    def __init__(self, reduction='mean'):
+        super(TotalVariationLoss, self).__init__()
+        self.reduction = reduction
+
+    def forward(self, x):
+        tv_h = torch.abs(x[1:, :] - x[:-1, :])
+        tv_w = torch.abs(x[:, 1:] - x[:, :-1])
+
+        loss = tv_h.sum() + tv_w.sum()
+
+        if self.reduction == 'mean':
+            loss /= x.numel()
+        elif self.reduction == 'sum':
+            pass
+
+        return loss
+
 class ScanningGeometry:
     @staticmethod
     def getParametricIntersection(startPoint, endPoint, bboxMin, bboxMax):
@@ -120,13 +139,19 @@ def renderRays(neaf_model, scanningGeometry: ScanningGeometry, viewRange, trueVa
 
 def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
-    maxSamples = 256 * 7 * 128 # Experimental max samples fitting on the GPU
+    tv_lambda = 0.005
+    tv_entry = 1000
+
+    maxSamples = 256 * 70 * 128 # Experimental max samples fitting on the GPU
 
     viewsPerBatch = int(np.floor(maxSamples / (scanningGeometry.getDetectorCount() * scanningGeometry.getNumSamples())))
 
+    viewsPerBatch = np.min([viewsPerBatch, scanningGeometry.getProjCount()])
+
     loss_fn = torch.nn.MSELoss()
-    optimizer = torch.optim.SGD(neafModel.parameters(), lr=0.001, momentum=0.9)
-    scheduler = StepLR(optimizer, step_size=100, gamma=0.9)
+    tv_loss = TotalVariationLoss()
+    optimizer = torch.optim.Adam(neafModel.parameters(), eps=1e-15)
+    scheduler = StepLR(optimizer, step_size=1000, gamma=0.8)
 
     neafModel.train(True)
 
@@ -139,8 +164,12 @@ def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
         while viewRange[0] < scanningGeometry.getProjCount():
             optimizer.zero_grad()
             output = renderRays(neafModel, scanningGeometry, viewRange)
+            sino_section = groundTruth[viewRange[0] * scanningGeometry.getDetectorCount():viewRange[1] * scanningGeometry.getDetectorCount()]
 
-            loss = loss_fn(output, groundTruth[viewRange[0] * scanningGeometry.getDetectorCount():viewRange[1] * scanningGeometry.getDetectorCount()])
+            loss = loss_fn(output, sino_section)
+            if epoch > tv_entry:
+                model_output = sampleModel(neafModel, 512, detach=False, randomize=True)
+                loss = loss + tv_lambda * tv_loss(model_output)
             loss.backward()
             runningLoss += loss.item()
             optimizer.step()
@@ -168,18 +197,21 @@ def evaluateModelSinogram(neafModel, scanningGeometry: ScanningGeometry):
     
     return torch.transpose(sino, 0, 1)
 
-@torch.no_grad()
-def sampleModel(neafModel, resolution):
+# @torch.no_grad()
+def sampleModel(neafModel, resolution, detach= True, randomize = False):
 
     evalSamplePoints = np.zeros([resolution * resolution, 2], dtype=np.float32)
+    jitter = torch.rand([resolution * resolution, 2], device="cuda") * 0.45 / resolution
     for x in range(resolution):
         for y in range(resolution):
-            evalSamplePoints[x * resolution + y, 0] = x / resolution / 2.0 - 1.0
-            evalSamplePoints[x * resolution + y, 1] = y / resolution / 2.0 - 1.0
+            evalSamplePoints[x * resolution + y, 0] = x / resolution * 2.0 - 1.0
+            evalSamplePoints[x * resolution + y, 1] = y / resolution * 2.0 - 1.0
 
-    evalSamples = torch.tensor(evalSamplePoints, requires_grad=False, dtype=torch.float32).cuda()
+    evalSamples = torch.tensor(evalSamplePoints, requires_grad=False, dtype=torch.float32).cuda() + jitter
 
-    output = neafModel(evalSamples).detach().cpu()
+    output = neafModel(evalSamples)
+    if detach:
+        output = output.detach().cpu()
 
     output = torchvision.transforms.functional.hflip(torch.reshape(output, [resolution, resolution]))
     return torch.transpose(output, 0, 1)
