@@ -27,7 +27,7 @@ if __name__=="__main__":
     resolution = 256
     numProjections = 36
     numPixels = 256
-    numSamplePoints = 256
+    numSamplePoints = 128
 
     proj_geom_vec, bboxMin, bboxMax, V_exact_id, V_exact, sinogram_id, sinogram, proj_id = setupGeometry(resolution, numProjections, numPixels)
     
@@ -43,7 +43,7 @@ if __name__=="__main__":
 
     nhmodel.train()
 
-    torchSino = torch.tensor(sinogram, dtype=torch.float32, requires_grad=True).reshape([scanningGeometry.getSinoNumberOfPixels()]).cuda()
+    torchSino = torch.tensor(sinogram / 128.0, dtype=torch.float32, requires_grad=True).reshape([scanningGeometry.getSinoNumberOfPixels()]).cuda()
 
     lossArray = trainModel(nhmodel, torchSino, scanningGeometry)
 
