@@ -140,8 +140,8 @@ def renderRays(neaf_model, scanningGeometry: ScanningGeometry, viewRange, trueVa
 
 def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
-    tv_lambda = 0.007
-    tv_entry = 3000
+    tv_lambda = 0.001
+    tv_entry = 200
 
     maxSamples = 256 * 70 * 128 # Experimental max samples fitting on the GPU
 
@@ -158,7 +158,7 @@ def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
     lossArray = []
 
-    for epoch in range(6000):
+    for epoch in range(2000):
         runningLoss = 0
         viewRange = [0, viewsPerBatch]
         
@@ -206,7 +206,7 @@ def evaluateModelSinogram(neafModel, scanningGeometry: ScanningGeometry):
 def sampleModel(neafModel, resolution, detach= True, randomize = False):
 
     evalSamplePoints = np.zeros([resolution * resolution, 2], dtype=np.float32)
-    jitter = torch.rand([resolution * resolution, 2], device="cuda") * 0.45 / resolution
+    jitter = torch.rand([resolution * resolution, 2], device="cuda") * 0.1 / resolution
     for x in range(resolution):
         for y in range(resolution):
             evalSamplePoints[x * resolution + y, 0] = x / resolution * 2.0 - 1.0
