@@ -20,9 +20,11 @@ class NHGrid(nn.Module):
             nn.Embedding(self.hashSize, self.numGridFeatures) for _ in range(self.gridLevels)
         ])
         self.block1 = nn.Sequential(
-            nn.Linear(self.gridLevels * self.numGridFeatures, 8), nn.LeakyReLU(),
-            nn.Linear(8, 4), nn.LeakyReLU(),
-            nn.Linear(4, 1)
+            nn.Linear(self.gridLevels * self.numGridFeatures, 64), nn.LeakyReLU(),
+            nn.Linear(64, 32), nn.LeakyReLU(),
+            nn.Linear(32, 16), nn.LeakyReLU(),
+            nn.Linear(16, 8), nn.LeakyReLU(),
+            nn.Linear(8, 1),
         )
 
         self.hashSpacing = []

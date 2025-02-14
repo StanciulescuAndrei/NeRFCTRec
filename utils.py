@@ -140,8 +140,8 @@ def renderRays(neaf_model, scanningGeometry: ScanningGeometry, viewRange, trueVa
 
 def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
-    tv_lambda = 0.001
-    tv_entry = 200
+    tv_lambda = 0.05
+    tv_entry = 0
 
     maxSamples = 256 * 70 * 128 # Experimental max samples fitting on the GPU
 
@@ -151,7 +151,7 @@ def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
     loss_fn = torch.nn.MSELoss()
     tv_loss = TotalVariationLoss()
-    optimizer = torch.optim.Adam(neafModel.parameters(), eps=1e-15)
+    optimizer = torch.optim.Adam(neafModel.parameters())
     scheduler = StepLR(optimizer, step_size=1000, gamma=0.8)
 
     neafModel.train(True)
