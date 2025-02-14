@@ -23,7 +23,7 @@ def setupGeometry(resolution, numProjections, numPixels):
 
     return proj_geom_vec, bboxMin, bboxMax, V_exact_id, V_exact, sinogram_id, sinogram, proj_id
 
-if __name__=="__main__":
+def main():
     resolution = 256
     numProjections = 36
     numPixels = 256
@@ -36,7 +36,7 @@ if __name__=="__main__":
     torch.set_grad_enabled(True)
     neafModel = NeAF(numInputFeatures=2, encodingDegree=8).cuda()
 
-    nhmodel = NHGrid(numInputFeatures=2, numGridFeatures=2, gridLevels=8, hashSize=2**17).cuda()
+    nhmodel = NHGrid(numInputFeatures=2, numGridFeatures=2, gridLevels=8, hashSize=2**16).cuda()
 
     # checkpoint = torch.load("checkpoint", map_location="cuda")
     # neafModel.load_state_dict(checkpoint)
@@ -73,3 +73,6 @@ if __name__=="__main__":
     # garbage disposal
     astra.data2d.delete([sinogram_id, V_exact_id])
     astra.projector.delete(proj_id)
+
+if __name__=="__main__":
+    main()

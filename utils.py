@@ -139,8 +139,8 @@ def renderRays(neaf_model, scanningGeometry: ScanningGeometry, viewRange, trueVa
 
 def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
-    tv_lambda = 0.005
-    tv_entry = 1000
+    tv_lambda = 0.007
+    tv_entry = 3000
 
     maxSamples = 256 * 70 * 128 # Experimental max samples fitting on the GPU
 
