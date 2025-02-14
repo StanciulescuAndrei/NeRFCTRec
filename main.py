@@ -9,7 +9,7 @@ def setupGeometry(resolution, numProjections, numPixels):
     bboxMin = np.array([-resolution // 2, -resolution // 2])
     bboxMax = np.array([resolution // 2, resolution // 2])
 
-    proj_geom = astra.create_proj_geom('fanflat', 1, numPixels, np.linspace(0, 2 * np.pi, numProjections, endpoint=False), 10000, 200)
+    proj_geom = astra.create_proj_geom('fanflat', 0.25, numPixels, np.linspace(0, 2 * np.pi, numProjections, endpoint=False), 10000, 200)
     vol_geom = astra.create_vol_geom(resolution, resolution, bboxMin[0], bboxMax[0], bboxMin[1], bboxMax[1])
     proj_id = astra.create_projector('cuda', proj_geom, vol_geom)
 
@@ -26,8 +26,8 @@ def setupGeometry(resolution, numProjections, numPixels):
 def main():
     resolution = 256
     numProjections = 36
-    numPixels = 256
-    numSamplePoints = 128
+    numPixels = 256 * 4
+    numSamplePoints = 256
 
     proj_geom_vec, bboxMin, bboxMax, V_exact_id, V_exact, sinogram_id, sinogram, proj_id = setupGeometry(resolution, numProjections, numPixels)
     

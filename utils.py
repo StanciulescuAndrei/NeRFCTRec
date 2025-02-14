@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import StepLR
 import torchvision
+from torchvision.utils import save_image
 import matplotlib.pyplot as plt
 import numpy as np
 import math
@@ -157,7 +158,7 @@ def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
     lossArray = []
 
-    for epoch in range(2000):
+    for epoch in range(6000):
         runningLoss = 0
         viewRange = [0, viewsPerBatch]
         
@@ -168,7 +169,7 @@ def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
             loss = loss_fn(output, sino_section)
             if epoch > tv_entry:
-                model_output = sampleModel(neafModel, 512, detach=False, randomize=True)
+                model_output = sampleModel(neafModel, 256, detach=False, randomize=True)
                 loss = loss + tv_lambda * tv_loss(model_output)
             loss.backward()
             runningLoss += loss.item()
@@ -178,7 +179,11 @@ def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
         scheduler.step()
         lossArray.append(runningLoss / scanningGeometry.getProjCount())
-        print(f"Epoch {epoch}: loss per projection {lossArray[-1]}")
+        if epoch % 100 == 0:
+            print(f"Epoch {epoch}: loss per projection {lossArray[-1]}")
+            log_out = sampleModel(neafModel, 256, detach=False, randomize=True).detach().cpu()
+            log_out = torchvision.transforms.functional.hflip(torch.reshape(log_out, [256, 256]))
+            save_image(log_out, f"./media/log_{epoch}.png")
     
     return lossArray
 
