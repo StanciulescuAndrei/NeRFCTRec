@@ -36,7 +36,7 @@ def main():
     torch.set_grad_enabled(True)
     neafModel = NeAF(numInputFeatures=2, encodingDegree=8).cuda()
 
-    nhmodel = NHGrid(numInputFeatures=2, numGridFeatures=2, gridLevels=4, hashSize=2**12).cuda()
+    nhmodel = NHGrid(numInputFeatures=2, numGridFeatures=2, gridLevels=4, hashSize=2**16).cuda()
 
     # checkpoint = torch.load("checkpoint", map_location="cuda")
     # neafModel.load_state_dict(checkpoint)
