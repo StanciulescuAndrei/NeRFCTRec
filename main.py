@@ -27,7 +27,7 @@ def main():
     resolution = 256
     numProjections = 36
     numPixels = 256
-    numSamplePoints = 64
+    numSamplePoints = 128
 
     proj_geom_vec, bboxMin, bboxMax, V_exact_id, V_exact, sinogram_id, sinogram, proj_id = setupGeometry(resolution, numProjections, numPixels)
     

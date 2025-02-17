@@ -16,6 +16,10 @@ class NHGrid(nn.Module):
         self.dimIncrease = 1.3
         self.factors = torch.tensor([1, 64]).cuda()
 
+        self.hashSpacing = []
+        for i in range(self.gridLevels):
+            self.hashSpacing.append(64 // np.power(self.dimIncrease, self.gridLevels - i - 1))
+
         self.hashFeatures = nn.ModuleList([
             nn.Embedding(self.hashSize, self.numGridFeatures) for _ in range(self.gridLevels)
         ])
@@ -27,9 +31,15 @@ class NHGrid(nn.Module):
             nn.Linear(8, 1),
         )
 
-        self.hashSpacing = []
-        for i in range(self.gridLevels):
-            self.hashSpacing.append(64 // np.power(self.dimIncrease, self.gridLevels - i - 1))
+        for emb in self.hashFeatures:
+            nn.init.uniform_(emb.weight, -1e-4, 1e-4)
+
+        for layer in self.block1:
+            if isinstance(layer, nn.Linear):
+                nn.init.uniform_(layer.weight, -1.0/8, 1.0/8)
+                nn.init.constant_(layer.bias, 0.0)
+
+        
     
     def positionalEncoding(self, x):
         out = []
