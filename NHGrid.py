@@ -37,8 +37,6 @@ class NHGrid(nn.Module):
             if isinstance(layer, nn.Linear):
                 nn.init.uniform_(layer.weight, -1.0/8, 1.0/8)
                 nn.init.constant_(layer.bias, 0.0)
-
-        
     
     def positionalEncoding(self, x):
         out = []

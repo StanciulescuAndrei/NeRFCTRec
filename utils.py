@@ -140,7 +140,7 @@ def renderRays(neaf_model, scanningGeometry: ScanningGeometry, viewRange, trueVa
 
 def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
-    tv_lambda = 0.007
+    tv_lambda = 0.005
     tv_entry = 0
 
     maxSamples = 256 * 70 * 128 # Experimental max samples fitting on the GPU
@@ -180,7 +180,7 @@ def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
         scheduler.step()
         lossArray.append(runningLoss / scanningGeometry.getProjCount())
         if epoch % 100 == 0:
-            print(f"Epoch {epoch}: loss per projection {lossArray[-1]}")
+            # print(f"Epoch {epoch}: loss per projection {lossArray[-1]}")
             log_out = sampleModel(neafModel, 256, detach=False, randomize=True).detach().cpu()
             log_out = torchvision.transforms.functional.hflip(torch.reshape(log_out, [256, 256]))
             save_image(log_out, f"./media/log_{epoch}.png")
