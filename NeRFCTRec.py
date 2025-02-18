@@ -65,8 +65,15 @@ def startApp():
 
     vol_geom, proj_geom_vec, bboxMin, bboxMax, V_exact_id, V_exact, sinogram_id, sinogram, proj_id = setupGeometry(resolution, numProjections, numPixels)
 
+    startTime = time.time()
     cgls_reconstruction =  eval_cgls(vol_geom, proj_id, sinogram_id)
+    endTime = time.time()
+    print(f"CGLS done in: {endTime - startTime} seconds...")
+
+    startTime = time.time()
     sirt_reconstruction =  eval_sirt(vol_geom, proj_id, sinogram_id)
+    endTime = time.time()
+    print(f"SIRT done in: {endTime - startTime} seconds...")
     
     scanningGeometry = ScanningGeometry(proj_geom_vec, bboxMin, bboxMax, numSamplePoints)
 
@@ -105,19 +112,18 @@ def startApp():
     plt.title("Reference")
     plt.imshow(V_exact)
     plt.subplot(1, 4, 2)
-    plt.title("NeRF")
+    plt.xlabel(f"PSNR: {nerf_quality} dB")
+    plt.title("NeRF + Neural grids")
     plt.imshow(output)
     plt.subplot(1, 4, 3)
+    plt.xlabel(f"PSNR: {cgsl_quality} dB")
     plt.title("CGSL")
     plt.imshow(cgls_reconstruction)
     plt.subplot(1, 4, 4)
+    plt.xlabel(f"PSNR: {sirt_quality} dB")
     plt.title("SIRT")
     plt.imshow(sirt_reconstruction)
     plt.suptitle("Reconstruction comparison", fontsize=14)
-    # plt.subplot(1, 4, 3)
-    # plt.imshow(last_sino)
-    # plt.subplot(1, 4, 4)
-    # plt.imshow(sinogram)
     plt.show()
 
 

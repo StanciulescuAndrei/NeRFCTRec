@@ -158,7 +158,7 @@ def trainModel(neafModel, groundTruth, scanningGeometry: ScanningGeometry):
 
     lossArray = []
 
-    for epoch in range(1000):
+    for epoch in range(2000):
         runningLoss = 0
         viewRange = [0, viewsPerBatch]
         
